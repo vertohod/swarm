@@ -10,6 +10,7 @@
 #include <list>
 
 #include "service_messages.h"
+#include "table_interface.h"
 #include "key_interface.h"
 #include "object.h"
 #include "record.h"
@@ -20,28 +21,6 @@
 
 namespace swarm
 {
-
-class table_interface
-{
-public:
-    virtual std::shared_ptr<const answer> get(OID index) = 0;
-    virtual std::shared_ptr<const object> get_object(OID index) = 0;
-    virtual std::shared_ptr<const answer> get_with_limit(size_t start, size_t limit, std::function<bool(const object&)> where) = 0;
-    virtual std::shared_ptr<const answer> find(std::shared_ptr<const key_interface>& key_ptr, size_t start, size_t limit, std::function<bool(const object&)> where) = 0;
-    virtual std::shared_ptr<const answer> find_range(std::shared_ptr<const key_interface>& lower_ptr, std::shared_ptr<const key_interface>& upper_ptr, size_t start, size_t limit, std::function<bool(const object&)> where) = 0;
-    virtual OID insert(std::shared_ptr<const object> object_ptr) = 0;
-    virtual bool update(OID index, std::shared_ptr<const object> object_ptr) = 0;
-    virtual bool remove(OID index) = 0;
-    virtual size_t size() = 0;
-    virtual bool get_unique_keys_flag() = 0;
-
-    virtual bool try_lock_record(OID oid) = 0;
-    virtual bool try_lock_table() = 0;
-    virtual bool unlock_record(OID oid) = 0;
-    virtual bool unlock_table() = 0;
-
-    virtual ~table_interface();
-};
 
 // Наследуется всеми таблицами. По умолчанию не имеет ключей,
 // но производные таблицы могут иметь любое количество ключей и должны обрабатывать их
@@ -60,18 +39,14 @@ private:
     // Индексы должны быть уникальными
     typedef std::unordered_map<OID, std::shared_ptr<record>> object_store_t;
 
-    object_store_t      m_object_store; // основное хранилище. хранит только свои записи
-    object_store_t      m_object_cache; // хранит чужие записи на протяжении короткого времени
-
-    keys_stores_t       m_keys_stores;
-
-    const bool          m_settings;
     OID                 m_server_id;
-
-    state_t             m_state;
     OID                 m_last_oid;
-    const std::string&  m_name;
 
+    object_store_t      m_object_store; // основное хранилище
+    keys_stores_t       m_keys_stores;
+    const size_t        m_settings;
+    state_t             m_state;
+    const std::string&  m_name;
     bool                m_unique_keys_exist_flag;
 
     std::mutex          m_mutex;
@@ -84,9 +59,7 @@ public:
     table(OID server_id) :
         m_name(T::stp()),
         m_settings(T::ssettings()),
-        m_server_id(server_id),
         m_state(START),
-        m_last_oid(0),
         m_unique_keys_exist_flag(false)
     {
         init_keys();
@@ -98,18 +71,18 @@ private:
         m_unique_keys_exist_flag = T::init_keys(m_keys_stores);
     }
 
-    bool keys_insert(std::shared_ptr<record> record_ptr, keys_stores_t::iterator it)
+    bool keys_insert(std::shared_ptr<record> record_ptr, keys_stores_t::iterator key_it)
     {
-        if (it == m_keys_stores.end()) return true;
+        if (key_it == m_keys_stores.end()) return true;
 
         bool res = false;
-        if (it->second->add(record_ptr)) {
-            auto next_it = it;
+        if (key_it->second->add(record_ptr)) {
+            auto next_it = key_it;
             if (keys_insert(record_ptr, ++next_it)) {
-                it->second->commit();
+                key_it->second->commit();
                 res = true;
             } else {
-                it->second->rollback();
+                key_it->second->rollback();
             }
         }
         lo::l(lo::TRASH) << "keys_insert, res: " << res;
@@ -124,49 +97,6 @@ private:
         keys_delete(record_ptr, ++it);
 
         return true;
-    }
-
-    size_t get_mask(size_t bits, size_t sn_bits)
-    {
-        size_t res = 0;
-        for (size_t count = 0; count < (bits - sn_bits); ++count) {
-            res = res << 1 | 1;
-        }
-        return res;
-    }
-
-    OID get_server_id(size_t bits, size_t sn_bits)
-    {
-        OID res = m_server_id;
-        for (size_t count = 0; count < (bits - sn_bits); ++count) {
-            res = res << 1;
-        }
-        return res;
-    }
-
-    OID oid(bool increment = false, size_t bits = 52, size_t sn_bits = 12)
-    {
-        // Ограничение количества бит в OID (для корректной работы в JS)
-        static const size_t mask = get_mask(bits, sn_bits);
-        // В старшие биты зашиваем номер сервера
-        OID server_id = get_server_id(bits, sn_bits);
-
-        static std::mt19937_64 generator;
-        static std::uniform_int_distribution<size_t> distribution(1, mask);
-
-        while (true) {
-            // Так делал, чтоб генерированные oid гарантированно хранились на текущем сервере
-            /*
-            OID res = increment ? (++m_last_oid * m_max_number) : distribution(generator);
-            res |= server_id;
-            res = res - (res % m_max_number) + m_server_id;
-            */
-            OID res = increment ? ++m_last_oid : distribution(generator);
-            res |= server_id;
-            if (check(res)) return res;
-        }
-
-        return 0;
     }
 
     OID insert(std::shared_ptr<record> record_ptr)
@@ -213,9 +143,11 @@ public:
         if (oid == 0) {
             record_ptr->set_payload(temp_payload_ptr);
             // Предполагается, что это точно выполнится, т.к. эта запись там уже была
+            // TODO
             insert(record_ptr);
+            return false;
         }
-        return oid;
+        return true;
     }
 
     virtual bool remove(OID index) override
@@ -248,7 +180,7 @@ public:
         return it->second->get_payload();
     }
 
-    virtual std::shared_ptr<const answer> get_with_limit(size_t start, size_t limit, std::function<bool(const object&)> where) override
+    virtual std::shared_ptr<const answer> get_with_limit(std::function<bool(const object&)> where, size_t start, size_t limit) override
     {
         auto answer_ptr = answer::create();
 
@@ -298,7 +230,7 @@ public:
         return it->second->find_range(lower_ptr, upper_ptr, start, limit, where);
     }
 
-    bool try_lock_record() override
+    bool lock_record(OID oid) override
     {
         std::unique_lock<std::mutex> lock(m_mutex);
         auto it = m_locked_records.find(oid);
@@ -306,11 +238,6 @@ public:
 
         m_locked_records.insert(oid);
         return true;
-    }
-
-    bool try_lock_table() override
-    {
-        return m_mutex.try_lock();
     }
 
     void unlock_record(OID oid) override
@@ -321,14 +248,52 @@ public:
         m_cv.notify_all();
     }
 
-    void unlock_table() override
-    {
-        m_mutex.unlock();
-    }
-
     bool get_unique_keys_flag() override
     {
         return m_unique_keys_exist_flag;
+    }
+
+private:
+    size_t get_mask(size_t bits, size_t sn_bits)
+    {
+        size_t res = 0;
+        for (size_t count = 0; count < (bits - sn_bits); ++count) {
+            res = res << 1 | 1;
+        }
+        return res;
+    }
+
+    OID get_server_id(size_t bits, size_t sn_bits)
+    {
+        OID res = m_server_id;
+        for (size_t count = 0; count < (bits - sn_bits); ++count) {
+            res = res << 1;
+        }
+        return res;
+    }
+
+    OID oid(bool increment = false, size_t bits = 52, size_t sn_bits = 12)
+    {
+        // Ограничение количества бит в OID (для корректной работы в JS)
+        static const size_t mask = get_mask(bits, sn_bits);
+        // В старшие биты зашиваем номер сервера
+        OID server_id = get_server_id(bits, sn_bits);
+
+        static std::mt19937_64 generator;
+        static std::uniform_int_distribution<size_t> distribution(1, mask);
+
+        while (true) {
+            // Так делал, чтоб генерированные oid гарантированно хранились на текущем сервере
+            /*
+            OID res = increment ? (++m_last_oid * m_max_number) : distribution(generator);
+            res |= server_id;
+            res = res - (res % m_max_number) + m_server_id;
+            */
+            OID res = increment ? ++m_last_oid : distribution(generator);
+            res |= server_id;
+            if (check(res)) return res;
+        }
+        return 0;
     }
 };
 

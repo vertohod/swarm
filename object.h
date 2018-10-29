@@ -31,16 +31,6 @@ public:
     static deserialization_functions_t m_deserialization_functions;
     static index_fields_t m_index_fields;
 
-public:
-    enum EVENT {
-        NONE    = 0,
-        SELECT  = 1,
-        INSERT  = 2,
-        UPDATE  = 3,
-        REMOVE  = 4,
-        RESULT  = 5
-    };
-
 private:
     static create_functions_t& instance_store_functions();
 
@@ -69,17 +59,6 @@ public:
 
 public:
     bool operator==(const object& obj) const;
-};
-
-class index
-{
-private:
-    OID m_index;
-public:
-    index();
-    index(OID);
-    void set_value(OID);
-    OID value() const;
 };
 
 } // end of namespace
