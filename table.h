@@ -77,18 +77,18 @@ private:
         m_unique_keys_exist_flag = T::init_keys(m_keys_stores);
     }
 
-    bool keys_insert(std::shared_ptr<record> record_ptr, keys_stores_t::iterator it)
+    bool keys_insert(std::shared_ptr<record> record_ptr, keys_stores_t::iterator key_it)
     {
-        if (it == m_keys_stores.end()) return true;
+        if (key_it == m_keys_stores.end()) return true;
 
         bool res = false;
-        if (it->second->add(record_ptr)) {
-            auto next_it = it;
+        if (key_it->second->add(record_ptr)) {
+            auto next_it = key_it;
             if (keys_insert(record_ptr, ++next_it)) {
-                it->second->commit();
+                key_it->second->commit();
                 res = true;
             } else {
-                it->second->rollback();
+                key_it->second->rollback();
             }
         }
         lo::l(lo::TRASH) << "keys_insert, res: " << res;
@@ -192,6 +192,7 @@ public:
         if (oid == 0) {
             record_ptr->set_payload(temp_payload_ptr);
             // Предполагается, что это точно выполнится, т.к. эта запись там уже была
+            // TODO
             insert(record_ptr);
         }
         return oid;
