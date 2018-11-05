@@ -39,18 +39,11 @@ private:
     // Индексы должны быть уникальными
     typedef std::unordered_map<OID, std::shared_ptr<record>> object_store_t;
 
-    object_store_t      m_object_store; // основное хранилище. хранит только свои записи
-    object_store_t      m_object_cache; // хранит чужие записи на протяжении короткого времени
-
+    object_store_t      m_object_store; // основное хранилище
     keys_stores_t       m_keys_stores;
-
-    const bool          m_settings;
-    OID                 m_server_id;
-
+    const size_t        m_settings;
     state_t             m_state;
-    OID                 m_last_oid;
     const std::string&  m_name;
-
     bool                m_unique_keys_exist_flag;
 
     std::mutex          m_mutex;
@@ -63,9 +56,7 @@ public:
     table(OID server_id) :
         m_name(T::stp()),
         m_settings(T::ssettings()),
-        m_server_id(server_id),
         m_state(START),
-        m_last_oid(0),
         m_unique_keys_exist_flag(false)
     {
         init_keys();
@@ -103,49 +94,6 @@ private:
         keys_delete(record_ptr, ++it);
 
         return true;
-    }
-
-    size_t get_mask(size_t bits, size_t sn_bits)
-    {
-        size_t res = 0;
-        for (size_t count = 0; count < (bits - sn_bits); ++count) {
-            res = res << 1 | 1;
-        }
-        return res;
-    }
-
-    OID get_server_id(size_t bits, size_t sn_bits)
-    {
-        OID res = m_server_id;
-        for (size_t count = 0; count < (bits - sn_bits); ++count) {
-            res = res << 1;
-        }
-        return res;
-    }
-
-    OID oid(bool increment = false, size_t bits = 52, size_t sn_bits = 12)
-    {
-        // Ограничение количества бит в OID (для корректной работы в JS)
-        static const size_t mask = get_mask(bits, sn_bits);
-        // В старшие биты зашиваем номер сервера
-        OID server_id = get_server_id(bits, sn_bits);
-
-        static std::mt19937_64 generator;
-        static std::uniform_int_distribution<size_t> distribution(1, mask);
-
-        while (true) {
-            // Так делал, чтоб генерированные oid гарантированно хранились на текущем сервере
-            /*
-            OID res = increment ? (++m_last_oid * m_max_number) : distribution(generator);
-            res |= server_id;
-            res = res - (res % m_max_number) + m_server_id;
-            */
-            OID res = increment ? ++m_last_oid : distribution(generator);
-            res |= server_id;
-            if (check(res)) return res;
-        }
-
-        return 0;
     }
 
     OID insert(std::shared_ptr<record> record_ptr)

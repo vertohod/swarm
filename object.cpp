@@ -9,14 +9,9 @@
 namespace swarm
 {
 
-// обязательно добно быть выше чем определение полей DEFINITION_FIELD
+// обязательно должно быть выше чем определение полей DEFINITION_FIELD
 object::serialization_functions_t object::m_serialization_functions;
 object::deserialization_functions_t object::m_deserialization_functions;
-
-index::index() {}
-index::index(OID i) { m_index = i; }
-void index::set_value(OID id) { m_index = id; }
-OID index::value() const { return m_index; }
 
 object::create_functions_t& object::instance_store_functions()
 {
