@@ -39,6 +39,9 @@ private:
     // Индексы должны быть уникальными
     typedef std::unordered_map<OID, std::shared_ptr<record>> object_store_t;
 
+    OID                 m_server_id;
+    OID                 m_last_oid;
+
     object_store_t      m_object_store; // основное хранилище
     keys_stores_t       m_keys_stores;
     const size_t        m_settings;
@@ -142,8 +145,9 @@ public:
             // Предполагается, что это точно выполнится, т.к. эта запись там уже была
             // TODO
             insert(record_ptr);
+            return false;
         }
-        return oid;
+        return true;
     }
 
     virtual bool remove(OID index) override
@@ -176,7 +180,7 @@ public:
         return it->second->get_payload();
     }
 
-    virtual std::shared_ptr<const answer> get_with_limit(size_t start, size_t limit, std::function<bool(const object&)> where) override
+    virtual std::shared_ptr<const answer> get_with_limit(std::function<bool(const object&)> where, size_t start, size_t limit) override
     {
         auto answer_ptr = answer::create();
 
@@ -226,7 +230,7 @@ public:
         return it->second->find_range(lower_ptr, upper_ptr, start, limit, where);
     }
 
-    bool try_lock_record() override
+    bool lock_record(OID oid) override
     {
         std::unique_lock<std::mutex> lock(m_mutex);
         auto it = m_locked_records.find(oid);
@@ -234,11 +238,6 @@ public:
 
         m_locked_records.insert(oid);
         return true;
-    }
-
-    bool try_lock_table() override
-    {
-        return m_mutex.try_lock();
     }
 
     void unlock_record(OID oid) override
@@ -249,14 +248,52 @@ public:
         m_cv.notify_all();
     }
 
-    void unlock_table() override
-    {
-        m_mutex.unlock();
-    }
-
     bool get_unique_keys_flag() override
     {
         return m_unique_keys_exist_flag;
+    }
+
+private:
+    size_t get_mask(size_t bits, size_t sn_bits)
+    {
+        size_t res = 0;
+        for (size_t count = 0; count < (bits - sn_bits); ++count) {
+            res = res << 1 | 1;
+        }
+        return res;
+    }
+
+    OID get_server_id(size_t bits, size_t sn_bits)
+    {
+        OID res = m_server_id;
+        for (size_t count = 0; count < (bits - sn_bits); ++count) {
+            res = res << 1;
+        }
+        return res;
+    }
+
+    OID oid(bool increment = false, size_t bits = 52, size_t sn_bits = 12)
+    {
+        // Ограничение количества бит в OID (для корректной работы в JS)
+        static const size_t mask = get_mask(bits, sn_bits);
+        // В старшие биты зашиваем номер сервера
+        OID server_id = get_server_id(bits, sn_bits);
+
+        static std::mt19937_64 generator;
+        static std::uniform_int_distribution<size_t> distribution(1, mask);
+
+        while (true) {
+            // Так делал, чтоб генерированные oid гарантированно хранились на текущем сервере
+            /*
+            OID res = increment ? (++m_last_oid * m_max_number) : distribution(generator);
+            res |= server_id;
+            res = res - (res % m_max_number) + m_server_id;
+            */
+            OID res = increment ? ++m_last_oid : distribution(generator);
+            res |= server_id;
+            if (check(res)) return res;
+        }
+        return 0;
     }
 };
 
