@@ -22,21 +22,17 @@ include_directories(${CMAKE_SOURCE_DIR}/../rapidjson/include)
 include_directories(${CMAKE_SOURCE_DIR}/commands)
 include_directories(${CMAKE_SOURCE_DIR}/objects)
 
-
-include_directories(${CMAKE_SOURCE_DIR}/../googletest/googletest/include)
-add_subdirectory(${CMAKE_SOURCE_DIR}/../googletest/googletest [EXCLUDE_FROM_ALL])
+include_directories(${CMAKE_SOURCE_DIR}/googletest/googletest/include)
+add_subdirectory(${CMAKE_SOURCE_DIR}/googletest/googletest)
 
 #file(MAKE_DIRECTORY "libs")
 #message(STATUS "*****")
 
-set(SOURCE_EXE
+file(GLOB SOURCE_EXE "${CMAKE_SOURCE_DIR}/*.cpp")
+
+set(SOURCE_EXE_INCLUDE
     ../include/types.cpp
     ../include/log.cpp
-    objects/server.cpp
-    objects/answer.cpp
-    objects/record.cpp
-    service_messages.cpp
-    store.cpp
 )
 
 set(Boost_USE_STATIC_LIBS OFF)
@@ -47,8 +43,8 @@ include_directories(${Boost_INCLUDE_DIRS})
 
 #-------------------------------------------------------------------------------
 
-add_executable(${PROJECT_NAME} ${SOURCE_EXE} swarm.cpp)
+add_executable(${PROJECT_NAME} ${SOURCE_EXE} ${SOURCE_EXE_INCLUDE} swarm.cpp)
 target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES})
 
-add_executable(tests ${SOURCE_EXE} unit_tests.cpp)
+add_executable(tests ${SOURCE_EXE} ${SOURCE_EXE_INCLUDE} unit_tests.cpp)
 target_link_libraries(tests ${Boost_LIBRARIES} gtest)
