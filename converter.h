@@ -8,7 +8,8 @@
 
 #include "defines_properties_methods.h"
 #include "object.h"
-#include "types.h"
+#include "index.h"
+#include <types.h>
 #include "json.h"
 
 namespace swarm

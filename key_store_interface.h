@@ -2,6 +2,7 @@
 #define KEY_STORE_INTERFACE_H
 
 #include <unordered_map>
+#include <functional>
 #include <memory>
 
 #include "key_interface.h"

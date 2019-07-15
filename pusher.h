@@ -7,6 +7,7 @@
 #include <list>
 
 #include "object.h"
+#include "index.h"
 #include "types.h"
 #include "json.h"
 

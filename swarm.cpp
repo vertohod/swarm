@@ -6,7 +6,7 @@
 #include "alphabet.h"
 #include "util.h"
 #include "md5.h"
-#include "hex.h"
+//#include "hex.h"
 #include <set>
 
 namespace swarm
@@ -212,9 +212,9 @@ OID swarm::insert(std::shared_ptr<const object> object_ptr, std::function<void(O
     // Если есть уникальные ключи, необходимо блокировать таблицу
     // Не требуется синхронизация, делаем вставку только локально
     if (object_ptr->settings() & BIT_SYNCHRONIZE == 0) {
-        table_ptr->lock(0);
+//        table_ptr->lock(0);
         res = table_ptr->insert(object_ptr);
-        table_ptr->unlock(0);
+//        table_ptr->unlock(0);
         return res;
     }
 
@@ -238,9 +238,9 @@ OID swarm::insert(std::shared_ptr<const object> object_ptr, std::function<void(O
                 }
             );
         } else {
-            table_ptr->lock_block(0);
+//            table_ptr->lock_block(0);
             res = table_ptr->insert(object_ptr);
-            table_ptr->unlock(0);
+//            table_ptr->unlock(0);
         }
     } else {
         res = table_ptr->insert(object_ptr);
@@ -551,7 +551,7 @@ void swarm::lock_table(std::shared_ptr<const object> object_ptr, function_t fn)
         insert(packet_ptr, true, fn);
     }
 }
-/*
+
 void swarm::lock_table(sptr_cstr table_name, OID oid, function_t fn)
 {
     // Заблокировали таблицу/запись локально
@@ -569,9 +569,7 @@ void swarm::lock_table(sptr_cstr table_name, OID oid, function_t fn)
     // Отправили пакет для блокировки таблицы/записи на других серверах
     insert(packet_ptr, true, fn);
 }
-*/
 
-/*
 bool swarm::lock_table(sptr_cstr table_name)
 {
     return table(table_name)->lock();
@@ -581,7 +579,6 @@ bool swarm::lock_record(sptr_cstr table_name, OID oid)
 {
     return table(table_name)->lock_record(oid);
 }
-*/
 
 void swarm::unlock(sptr_cstr table_name, OID oid)
 {
@@ -815,7 +812,7 @@ void swarm::send_buffer::remove(int socket_id)
 }
 
 // --------------- transaction --------------------
-
+//
 swarm::task::task(bool parallel) : m_parallel(parallel), m_index(0)
 {
     m_packets = std::make_shared<packets_t>();

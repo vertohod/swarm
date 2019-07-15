@@ -1,6 +1,8 @@
 #ifndef INDEX_H
 #define INDEX_H
 
+#include <types.h>
+
 namespace swarm
 {
 

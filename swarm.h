@@ -14,19 +14,19 @@
 #include <queue>
 #include <list>
 
-#include "swarm/commands/response.h"
 #include "key_store_interface.h"
 #include "get_servers_list.h"
-#include "authentication.h"
 #include "socket_service.h"
+#include "authentication.h"
 #include "get_remainder.h"
 #include "server_short.h"
-#include "packet.h"
+#include "response.h"
 #include "get_salt.h"
 #include "command.h"
+#include "packet.h"
+#include "socket.h"
 #include "unlock.h"
 #include "server.h"
-#include "socket.h"
 #include "object.h"
 #include "answer.h"
 #include "router.h"
@@ -230,7 +230,6 @@ public:
     // ---------
 
 private:
-    static sptr_cstr md5(const std::string& data);
     void send(int socket_id, std::shared_ptr<object> object_ptr);
     void send(int socket_id);
     void _send(int socket_id, sptr_cstr data);
