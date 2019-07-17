@@ -14,12 +14,14 @@
 #include <queue>
 #include <list>
 
+#include "transaction_in_processing.h"
 #include "key_store_interface.h"
 #include "get_servers_list.h"
 #include "socket_service.h"
 #include "authentication.h"
 #include "get_remainder.h"
 #include "server_short.h"
+#include "transaction.h"
 #include "response.h"
 #include "get_salt.h"
 #include "command.h"
@@ -97,41 +99,6 @@ private:
         void confirm(OID server_id);
     };
 
-    class transaction
-    {
-    private:
-        const size_t    m_number;
-        function_t      m_fn;
-        time_tt         m_timeout;
-
-        std::vector<std::shared_ptr<task>>  m_tasks;
-        size_t                              m_index;
-
-    public:
-        transaction(size_t number);
-        std::shared_ptr<task::packets_t> get_packets();
-        bool is_finished();
-        void fn(bool ok);
-    };
-
-    class transactions_in_processing
-    {
-    private:
-        std::unordered_map<size_t, std::shared_ptr<transaction>> m_transactions;
-        // finish_time, transaction_id
-        std::map<time_tt, size_t> m_timeouts;
-
-    public:
-        transactions_in_processing();
-        void add_transaction(std::shared_ptr<transaction> transaction_ptr);
-        std::shared_ptr<transaction> get_transaction(size_t tr_id);
-        void remove_transaction(size_t tr_id);
-        void remove_transaction(std::shared_ptr<transaction> transaction_ptr);
-
-    private:
-        void thread_function(); // отслеживает транзакции, не выполненные до истечении времени
-    };
-
     std::mutex                  m_mutex;
     std::condition_variable     m_cv;
 
@@ -181,7 +148,9 @@ public:
 
     table_interface* table(const std::string& table_name);
 
+    OID insert(std::shared_ptr<const object> object_ptr, function_t fn = nullptr);
     OID insert(std::shared_ptr<const object> object_ptr, std::function<void(OID oid)> fn = nullptr);
+
     bool update(OID index, std::shared_ptr<const object> object_ptr, std::function<void(bool flag)> fn = nullptr);
 
     template <typename T>
@@ -230,6 +199,7 @@ public:
     // ---------
 
 private:
+    sptr_cstr md5(const std::string& data);
     void send(int socket_id, std::shared_ptr<object> object_ptr);
     void send(int socket_id);
     void _send(int socket_id, sptr_cstr data);
@@ -242,6 +212,8 @@ private:
 
     void _lock(const std::string& table_name, OID oid, function_t fn = nullptr);
     // Пытается заблокировать всю таблицу
+    void lock_table(std::shared_ptr<const object> object_ptr, function_t fn);
+    void lock_table(sptr_cstr table_name, OID oid, function_t fn);
     bool lock_table(sptr_cstr table_name);
     // Пытается заблокировать запись в таблице
     bool lock_record(sptr_cstr table_name, OID oid);
@@ -261,6 +233,9 @@ private:
     void process(std::shared_ptr<result>& object_ptr);
 
     void begin_transaction(std::shared_ptr<transaction> transaction_ptr);
+    void send_packets(std::shared_ptr<transaction> transaction_ptr);
+    std::unordered_set<OID> get_recipient_servers(OID remainder);
+    std::vector<std::pair<OID, OID>> get_gateaways(std::unordered_set<OID>& recipient_servers);
 };
 
 } // end of namespace

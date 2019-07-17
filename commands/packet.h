@@ -11,12 +11,14 @@ namespace swarm
 {
 
 DECLARATION_OBJECT(packet,
+    DECLARATION_FIELD(OID, id)
     DECLARATION_FIELD(OID, transaction_id)
     DECLARATION_FIELD(OID, task_id)
     DECLARATION_FIELD(OID, action_id)
     DECLARATION_FIELD(OID, server_id)
     DECLARATION_FIELD(OID, gateaway_id)
     DECLARATION_FIELD(OID, recipient_id)
+    DECLARATION_FIELD(OID, remainder_recipient)
     DECLARATION_FIELD(std::shared_ptr<std::list<std::shared_ptr<object>>>, payload)
     DECLARATION_FIELD(std::shared_ptr<std::list<OID>>, route)
 )

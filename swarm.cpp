@@ -335,7 +335,7 @@ void swarm::process(int socket_id, std::shared_ptr<object>& object_ptr)
             auto packet_ptr = std::dynamic_pointer_cast<packet>(object_ptr);
             m_router.add_route(packet_ptr->get_route());
 
-            if (packet_ptr->get_server_recipient_id() == m_server_id || packet_ptr->get_remainder_recipient() == m_remainder) {
+            if (packet_ptr->get_recipient_id() == m_server_id || packet_ptr->get_remainder_recipient() == m_remainder) {
 
                 for (auto& payload_ptr : *packet_ptr->get_payload()) {
 
@@ -371,7 +371,8 @@ void swarm::process(int socket_id, OID server_id, std::shared_ptr<get_salt>& obj
         server_ptr->set_socket_id(socket_id);
         salt_str = util::get_random_string(ALPH_ENGLISH ALPH_NUMBERS, 100);
         server_ptr->set_salt(salt_str);
-        auto oid = insert(server_ptr);
+        function_t fn = nullptr; // TODO
+        auto oid = insert(server_ptr, fn);
         if (oid == 0) {
             response_ptr->set_code(SMESS001_ERROR);
             response_ptr->set_description(smessage(SMESS001_ERROR));
@@ -478,7 +479,8 @@ void swarm::process(int socket_id, OID server_id, std::shared_ptr<const server_s
         server_ptr->set_remainder(object_ptr->get_remainder());
         server_ptr->set_time(object_ptr->get_time());
         server_ptr->set_main(object_ptr->get_main());
-        insert(server_ptr);
+        function_t fn = nullptr; // TODO
+        insert(server_ptr, fn);
     }
 
     if (m_main_server_id != 0) {
@@ -486,9 +488,10 @@ void swarm::process(int socket_id, OID server_id, std::shared_ptr<const server_s
         auto packet_ptr = packet::create();
         packet_ptr->set_id(get_commands_number());
         packet_ptr->set_server_id(m_server_id);
-        packet_ptr->set_server_recipient_id(m_main_server_id);
+        packet_ptr->set_recipient_id(m_main_server_id);
         packet_ptr->get_payload()->push_back(get_remainder_ptr);
-        insert(packet_ptr);
+        function_t fn = nullptr; // TODO
+        insert(packet_ptr, fn);
     }
 }
 
@@ -498,9 +501,10 @@ void swarm::process(std::shared_ptr<get_remainder>& object_ptr)
     auto packet_ptr = packet::create();
     packet_ptr->set_id(get_commands_number());
     packet_ptr->set_server_id(m_server_id);
-    packet_ptr->set_server_recipient_id(m_main_server_id);
+    packet_ptr->set_recipient_id(m_main_server_id);
     packet_ptr->get_payload()->push_back(lock_ptr);
-    insert(packet_ptr);
+    function_t fn = nullptr; // TODO
+    insert(packet_ptr, fn);
 }
 
 void swarm::process(OID packet_id, std::shared_ptr<lock>& object_ptr)
@@ -512,13 +516,15 @@ void swarm::process(OID packet_id, std::shared_ptr<lock>& object_ptr)
     auto packet_ptr = packet::create();
     packet_ptr->set_id(get_commands_number());
     packet_ptr->set_server_id(m_server_id);
-    packet_ptr->set_server_recipient_id(m_main_server_id);
+    packet_ptr->set_recipient_id(m_main_server_id);
     packet_ptr->get_payload()->push_back(result_ptr);
-    insert(packet_ptr);
+    function_t fn = nullptr; // TODO
+    insert(packet_ptr, fn);
 }
 
 void swarm::process(std::shared_ptr<result>& object_ptr)
 {
+    /*
     auto transaction_ptr = m_transactions_in_processing.get_transaction(object_ptr->get_transaction_id());
     auto task_ptr = transaction_ptr->get_task(object_ptr->get_task_id());
     task_ptr->confirm(object_ptr->server_id());
@@ -533,6 +539,7 @@ void swarm::process(std::shared_ptr<result>& object_ptr)
     } else {
         if (task_ptr->is_ready()) send_packets(transaction_ptr);
     }
+    */
 }
 
 void swarm::lock_table(std::shared_ptr<const object> object_ptr, function_t fn)
@@ -541,24 +548,24 @@ void swarm::lock_table(std::shared_ptr<const object> object_ptr, function_t fn)
 
     if (table_ptr->get_unique_keys_flag() && (object_ptr->settings() & BIT_SYNCHRONIZE != 0)) {
 
-        auto lock_ptr = lock::create(object_ptr->tp());
+//        auto lock_ptr = lock::create(object_ptr->tp());
 
         auto packet_ptr = packet::create();
         packet_ptr->set_id(get_commands_number());
         packet_ptr->set_server_id(m_server_id);
-        packet_ptr->get_payload()->push_back(lock_ptr);
+//        packet_ptr->get_payload()->push_back(lock_ptr);
 
-        insert(packet_ptr, true, fn);
+        insert(packet_ptr, true, true, fn);
     }
 }
 
 void swarm::lock_table(sptr_cstr table_name, OID oid, function_t fn)
 {
     // Заблокировали таблицу/запись локально
-    table(table_name)->lock(oid);
+    table(*table_name)->lock_record(oid);
 
     auto lock_ptr = lock::create();
-    lock_ptr->set_table_name(table_name_temp);
+    lock_ptr->set_table_name(table_name);
     lock_ptr->set_oid(oid);
 
     auto packet_ptr = packet::create();
@@ -567,22 +574,23 @@ void swarm::lock_table(sptr_cstr table_name, OID oid, function_t fn)
     packet_ptr->get_payload()->push_back(lock_ptr);
 
     // Отправили пакет для блокировки таблицы/записи на других серверах
-    insert(packet_ptr, true, fn);
+    insert(packet_ptr, true, true, fn);
 }
 
 bool swarm::lock_table(sptr_cstr table_name)
 {
-    return table(table_name)->lock();
+//    return table(*table_name)->lock();
+    return false;
 }
 
 bool swarm::lock_record(sptr_cstr table_name, OID oid)
 {
-    return table(table_name)->lock_record(oid);
+    return table(*table_name)->lock_record(oid);
 }
 
 void swarm::unlock(sptr_cstr table_name, OID oid)
 {
-    function_t fn = [this, table_name, oid](bool unlock_ok){ table(*table_name)->unlock(oid); };
+    function_t fn = [this, table_name, oid](bool unlock_ok){ table(*table_name)->unlock_record(oid); };
 
     auto lock_ptr = unlock::create();
     lock_ptr->set_table_name(table_name);
@@ -594,7 +602,7 @@ void swarm::unlock(sptr_cstr table_name, OID oid)
     packet_ptr->get_payload()->push_back(lock_ptr);
 
     // Отправили пакет для разблокировки таблицы/записи на других серверах
-    insert(packet_ptr, true, fn);
+    insert(packet_ptr, true, true, fn);
 }
 
 OID swarm::get_new_remainder(OID server_id, OID remainder)
@@ -625,7 +633,7 @@ OID swarm::get_new_remainder(OID server_id, OID remainder)
 sptr_cstr swarm::md5(const std::string& data)
 {
     sptr_str result;
-
+/*
     byte digest[CryptoPP::Weak::MD5::DIGESTSIZE];
     CryptoPP::Weak::MD5 hash;
     hash.CalculateDigest(digest, reinterpret_cast<const byte*>(data.c_str()), data.length());
@@ -633,6 +641,7 @@ sptr_cstr swarm::md5(const std::string& data)
     encoder.Attach(new CryptoPP::StringSink(*result));
     encoder.Put(digest, sizeof(digest));
     encoder.MessageEnd();
+    */
 
     return result;
 }
@@ -687,7 +696,7 @@ std::vector<std::pair<OID, OID>> swarm::get_gateaways(std::unordered_set<OID>& r
     return gateaways;
 }
 
-void swarm::insert(std::shared_ptr<const object> object_ptr, function_t fn)
+OID swarm::insert(std::shared_ptr<const object> object_ptr, function_t fn)
 {
     OID remainder = 0; // TODO
 
@@ -724,15 +733,17 @@ void swarm::insert(std::shared_ptr<const object> object_ptr, function_t fn)
     }
 
     begin_transaction(transaction_ptr);
+
+    return 0; // TODO
 }
 
-void swarm::begin_transaction(std::shared_ptr<transactin> transaction_ptr)
+void swarm::begin_transaction(std::shared_ptr<transaction> transaction_ptr)
 {
     m_transactions_in_processing.add_transaction(transaction_ptr);
     send_packets(transaction_ptr);
 }
 
-void swarm::send_packets(std::shared_ptr<transactin> transaction_ptr)
+void swarm::send_packets(std::shared_ptr<transaction> transaction_ptr)
 {
     auto packets_list = transaction_ptr->get_packets();
     for (auto packet_ptr : *packets_list) {

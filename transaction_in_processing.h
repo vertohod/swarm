@@ -1,6 +1,11 @@
 #ifndef TRANSACTION_IN_PROCESSING_H
 #define TRANSACTION_IN_PROCESSING_H
 
+#include <unordered_map>
+#include <map>
+
+#include "transaction.h"
+
 namespace swarm
 {
 
