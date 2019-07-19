@@ -1,13 +1,15 @@
 #define CRYPTOPP_ENABLE_NAMESPACE_WEAK 1
 
+#include <set>
+
 #include "defines_for_filter.h"
 #include "get_remainder.h"
-#include "swarm.h"
 #include "alphabet.h"
-#include "util.h"
+#include <packet.h>
+#include "swarm.h"
+#include <util.h>
 #include "md5.h"
 //#include "hex.h"
-#include <set>
 
 namespace swarm
 {
@@ -275,6 +277,10 @@ bool swarm::update(OID index, std::shared_ptr<const object> object_ptr, std::fun
     }
 
     return res;
+}
+
+void swarm::_lock(const std::string& table_name, OID oid, function_t fn)
+{
 }
 
 void swarm::shard(std::shared_ptr<const object> object_ptr)
@@ -653,6 +659,10 @@ void swarm::send(int socket_id)
     if (!data->empty()) _send(socket_id, data);
 }
 
+void swarm::send(int socket_id, std::shared_ptr<object> object_ptr)
+{
+}
+
 void swarm::_send(int socket_id, sptr_cstr data)
 {
     std::vector<unsigned char> temp(data->begin(), data->end());
@@ -700,6 +710,7 @@ OID swarm::insert(std::shared_ptr<const object> object_ptr, function_t fn)
 {
     OID remainder = 0; // TODO
 
+    /*
     auto recipient_servers = get_recipient_servers(remainder);
     auto gateaways = get_gateaways(recipient_servers);
 
@@ -733,8 +744,18 @@ OID swarm::insert(std::shared_ptr<const object> object_ptr, function_t fn)
     }
 
     begin_transaction(transaction_ptr);
+    */
 
     return 0; // TODO
+}
+
+void swarm::insert(std::shared_ptr<packet> packet_ptr, bool need_confirmation, bool in_order, function_t fn)
+{
+}
+
+OID swarm::_insert(std::shared_ptr<const object> object_ptr, std::function<void(OID oid)> fn)
+{
+    return 0;
 }
 
 void swarm::begin_transaction(std::shared_ptr<transaction> transaction_ptr)
@@ -747,156 +768,8 @@ void swarm::send_packets(std::shared_ptr<transaction> transaction_ptr)
 {
     auto packets_list = transaction_ptr->get_packets();
     for (auto packet_ptr : *packets_list) {
-        send(packet_ptr->get_recipient_id(), packet_ptr->serializate()); 
+//        send(packet_ptr->get_recipient_id(), packet_ptr->serialization()); // TODO
     }
-}
-
-bool swarm::send_buffer::empty(int socket_id)
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    auto it = m_buffer.find(socket_id);
-    if (it != m_buffer.end()) return it->second.second.empty();
-    return true;
-}
-
-void swarm::send_buffer::push(int socket_id, sptr_cstr data)
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    auto it = m_buffer.find(socket_id);
-    if (it == m_buffer.end()) {
-        auto pr = m_buffer.insert(std::make_pair(socket_id, std::make_pair(false, std::queue<sptr_cstr>())));
-        if (pr.second) pr.first->second.second.push(data);
-        else throw std::runtime_error("Can't insert structure for keeping datas");
-    } else {
-        it->second.first = false;
-        it->second.second.push(data);
-    }
-}
-
-void swarm::send_buffer::set_flag(int socket_id)
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    auto it = m_buffer.find(socket_id);
-    if (it != m_buffer.end()) {
-        if (it->second.second.empty()) it->second.first = true;
-    }
-}
-
-void swarm::send_buffer::unset_flag(int socket_id)
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    auto it = m_buffer.find(socket_id);
-    if (it == m_buffer.end()) {
-        m_buffer.insert(std::make_pair(socket_id, std::make_pair(false, std::queue<sptr_cstr>())));
-    } else {
-        it->second.first = false;
-    }
-}
-
-bool swarm::send_buffer::check_flag(int socket_id)
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    auto it = m_buffer.find(socket_id);
-    if (it != m_buffer.end()) return  it->second.first;
-    return true;
-}
-
-sptr_cstr swarm::send_buffer::pop(int socket_id)
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    auto it = m_buffer.find(socket_id);
-    if (it != m_buffer.end()) {
-        if (!it->second.second.empty()) {
-            auto data = it->second.second.front();
-            it->second.second.pop();
-            return data;
-        }
-    }
-    return "";
-}
-
-void swarm::send_buffer::remove(int socket_id)
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    auto it = m_buffer.find(socket_id);
-    if (it != m_buffer.end()) m_buffer.erase(it);
-}
-
-// --------------- transaction --------------------
-//
-swarm::task::task(bool parallel) : m_parallel(parallel), m_index(0)
-{
-    m_packets = std::make_shared<packets_t>();
-}
-
-void swarm::task::set_packet(std::shared_ptr<packet> packet_ptr, std::set<std::pair<OID, OID>>& servers)
-{
-    for (auto& pr : servers) {
-        auto packet_new_ptr = packet_ptr->make_copy();
-        packet_new_ptr->set_gateaway_id(pr.first);
-        packet_new_ptr->set_recipient_id(pr.second);
-        m_packets->push_back(packet_new_ptr);
-    }
-}
-
-std::shared_ptr<packets_t> swarm::get_packets()
-{
-    std::shared_ptr<packets_t> res;
-
-    if (m_parallel) {
-        res = m_packets;
-        for (auto packet_ptr : *m_packets) {
-            m_need_confirmation.insert(packet_ptr->get_recipient_id());
-        }
-    } else {
-        res = std::make_shared<packets_t>();
-        if (m_index < m_packets->size()) {
-            auto packet_ptr = m_packets->at(m_index++);
-            res->push_back(packet_ptr );
-            m_need_confirmation.insert(packet_ptr->get_recipient_id());
-        }
-    }
-
-    return res;
-}
-
-bool swarm::is_ready()
-{
-    return m_need_confirmation.empty();
-}
-
-bool swarm::is_finished()
-{
-    return is_ready() && m_index == m_packets->size();
-}
-
-void swarm::confirm(OID server_id)
-{
-    m_need_confirmation.erase(server_id);
-    if (!m_parallel) ++m_index;
-}
-
-transaction::transaction(size_t number) : m_number(number), m_index(0) {}
-
-std::shared_ptr<task::packets_t> transaction::get_packets()
-{
-    auto task_ptr = m_tasks[m_index];
-    if (task_ptr->is_finished() && (m_index + 1) < m_tasks.size()) {
-        task_ptr = m_tasks[++m_index];
-    }
-    return task_ptr->get_packets(); 
-}
-
-bool transaction::is_finished()
-{
-    if (m_tasks.size() == 0) return true;
-
-    return ((m_index + 1) == m_tasks.size() && m_tasks[m_index]->is_finished());
-}
-
-void transaction::fn(bool ok)
-{
-    m_fn(ok);
 }
 
 } // end of namespace

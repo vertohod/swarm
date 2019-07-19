@@ -1,5 +1,13 @@
-#ifndef TASK_H
-#define TASK_H
+#ifndef TASK_h
+#define TASK_h
+
+#include <unordered_set>
+#include <memory>
+#include <vector>
+#include <set>
+
+#include <packet.h>
+#include <types.h>
 
 namespace swarm
 {

@@ -22,6 +22,7 @@
 #include "get_remainder.h"
 #include "server_short.h"
 #include "transaction.h"
+#include "send_buffer.h"
 #include "response.h"
 #include "get_salt.h"
 #include "command.h"
@@ -39,6 +40,7 @@
 #include "range.h"
 #include "salt.h"
 #include "lock.h"
+#include "task.h"
 
 #define TIMEOUT = 500; // milliseconds
 
@@ -77,49 +79,11 @@ private:
 
     typedef std::function<void(bool)> function_t;
 
-    class task
-    {
-    public:
-        typedef std::vector<std::shared_ptr<packet>> packets_t;
+    std::mutex                              m_mutex;
+    std::condition_variable                 m_cv;
 
-    private:
-        std::shared_ptr<packets_t>  m_packets;
-        const bool                  m_parallel;
-        size_t                      m_index; // Используется, если m_parallel = false
-
-        std::unordered_set<OID>     m_need_confirmation;
-
-    public:
-        task(bool parallel);
-        void set_packet(std::shared_ptr<packet> packet_ptr, std::set<std::pair<OID, OID>>& servers);
-        std::shared_ptr<packets_t> get_packets();
-        void mark_ok(OID oid);
-        bool is_ready();
-        bool is_finished();
-        void confirm(OID server_id);
-    };
-
-    std::mutex                  m_mutex;
-    std::condition_variable     m_cv;
-
-    class send_buffer
-    {
-    private:
-        std::unordered_map<int, std::pair<bool, std::queue<sptr_cstr>>> m_buffer;
-        std::mutex                                                      m_mutex;
-
-    public:
-        bool empty(int socket_id);
-        void push(int socket_id, sptr_cstr data);
-        void set_flag(int socket_id);
-        void unset_flag(int socket_id);
-        bool check_flag(int socket_id);
-        sptr_cstr pop(int socket_id);
-        void remove(int socket_id);
-    };
-
-    send_buffer                     m_send_buffer;
-    transactions_in_processing      m_transactions_in_processing;
+    send_buffer                             m_send_buffer;
+    transactions_in_processing              m_transactions_in_processing;
 
 private:
     void thread_dispatcher();
@@ -177,7 +141,7 @@ public:
     template <typename T>
     std::shared_ptr<const answer> get_with_limit(size_t start, size_t limit, std::function<bool(const object&)> where = [](const object&){return true;})
     {
-        return table(T::stp())->get_with_limit(start, limit, where);
+        return table(T::stp())->get_with_limit(where, start, limit);
     }
 
     std::shared_ptr<const answer> find(std::shared_ptr<const key_interface> key_ptr, size_t start = 0, size_t limit = 0, std::function<bool(const object&)> where = [](const object&){return true;})

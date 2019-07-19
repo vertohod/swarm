@@ -1,6 +1,12 @@
 #ifndef SEND_BUFFER_H
 #define SEND_BUFFER_H
 
+#include <unordered_map>
+#include <queue>
+#include <mutex>
+
+#include <types.h>
+
 namespace swarm
 {
 
